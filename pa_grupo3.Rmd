@@ -1,0 +1,427 @@
+---
+title: "Población NINI"
+author: "Autores: Rubén Alfredo Llosa Chaqui, Yhilda Mirella Gil Chavez, Jose Antonio Achancaray Ramirez y Patricia Janeth Bendezú Santana"
+date: "18 de enero de 2025"
+output:
+  html_document:
+    toc: true
+    toc_depth: 5
+    toc_float:
+      collapsed: false
+      smooth_scroll: true
+      position: static
+    theme: journal
+    highlight: kate
+    df_print: paged
+    code_folding: show
+  pdf_document:
+    toc: true
+    toc_depth: '5'
+---
+# Introducción
+
+## Problemática
+
+xxxxxx
+
+## Planteamiento de problema
+
+xxxx
+
+# 1. Base de datos
+
+## 1.1. Cargar bases de datos
+
+Limpiar la consola de trabajo
+
+```{r}
+rm(list=ls())
+```
+
+Instalar librerias
+
+```{r message=FALSE, warning=FALSE}
+if (!require("haven")) install.packages("haven")
+if (!require("tidyverse")) install.packages("tidyverse")
+if (!require("foreign")) install.packages("foreign")
+if (!require("survey")) install.packages("survey")
+```
+
+Activar las librerias
+
+```{r message=FALSE, warning=FALSE}
+library(dplyr)
+library(stringr)
+library(knitr)
+```
+
+Configurar la carpeta directorio
+
+```{r message=FALSE, warning=FALSE}
+ruta <- "C:/Users/pbendezus/Documents/MAESTRIA/RSTUDIO/pa_grupo3"
+setwd(ruta)
+getwd()
+```
+
+Importar módulos
+
+Se importó 3 módulos de las ENAHO: Empleo, Educación y Miembros de hogar
+
+```{r}
+m_empleo <- read_dta(paste("./enaho01a-2023-500.dta",sep="/"))
+m_educacion <- read_dta(paste("./enaho01a-2023-300.dta",sep="/"))
+m_miembros <- read_dta(paste("./enaho01-2023-200.dta",sep="/"))
+```
+
+## 1.2. Unir base de datos
+
+Se combinan los módulos por las variables llave (conglome, vivienda, hogar, codperso)
+
+```{r}
+datos <- left_join(m_empleo, m_educacion, by = c("conglome", "vivienda", "hogar", "codperso"))
+datos <- left_join(datos, m_miembros, by = c("conglome", "vivienda", "hogar", "codperso"))
+```
+
+## 1.3. Crear variables
+
+-   **Seleccionar las personas que tienen 15 a 29 años de edad**
+
+Se renombra la variable p208a a "edad"
+
+```{r}
+datos <- datos %>% rename(edad =p208a)
+table(datos$edad, useNA = "alw")
+```
+
+Se filtra para jóvenes entre 15-29 años
+
+```{r}
+jovenes <- datos %>% filter(edad >= 15 & edad <= 29)
+table(jovenes$edad, useNA = "alw")
+```
+
+Se libera la memoria
+
+```{r}
+rm(datos, m_educacion, m_empleo, m_miembros)
+```
+
+### Variable residencia
+
+Se genera la tabla de frecuencia en función a la variable p204 - ¿Es miembro del hogar?
+
+```{r}
+table(jovenes$p204, useNA = "alw")
+```
+
+Se genera la tabla de frecuencia en función a la variable p205 - ¿Se encuentra ausente del hogar 30 dias a mas?
+
+```{r}
+table(jovenes$p205, useNA = "alw")
+```
+Se genera la tabla de frecuencia en función a la variable p206 - ¿Esta presente en el hogar 30 dias a mas?
+
+```{r}
+table(jovenes$p206, useNA = "alw")
+```
+
+Se crea la variable "residencia" usando una condición logica y se muestra la tabla de frecuencia
+
+```{r}
+jovenes <- jovenes %>% mutate(residencia = ifelse((p204 == 1 & p205 == 2) | (p204 == 2 & p206 == 1), 1, 0))
+table(jovenes$residencia, useNA = "alw")
+```
+
+Se filtra el dataframe donde residencia = 1 y se muestra la tabla de frecuencia
+
+```{r}
+jovenes <- jovenes %>% filter(residencia == 1)
+table(jovenes$residencia, useNA = "alw")
+```
+
+### Variable departamento
+
+Se crea una nueva columna llamada departamento con los dos primeros caracteres del ubigeo.
+Se emplea mutate() para recodificar los numeros en nombres de departamentos.
+Se muestra la tabla de frecuencia de la variable departamento.
+
+```{r}
+jovenes$departamento <- as.numeric(substr(jovenes$ubigeo, 1, 2))
+jovenes <- jovenes %>% mutate(departamento = recode(departamento, '1' = "Amazonas", '2' = "Ancash", '3' = "Apurímac",
+                                                    '4' = "Arequipa", '5' = "Ayacucho", '6' = "Cajamarca", '7' = "Callao",
+                                                    '8' = "Cusco", '9' = "Huancavelica", '10' = "Huánuco", '11' = "Ica",
+                                                    '12' = "Junín", '13' = "La Libertad", '14' = "Lambayeque", '15' = "Lima",
+                                                    '16' = "Loreto", '17' = "Madre de Dios", '18' = "Moquegua",
+                                                    '19' = "Pasco", '20' = "Piura", '21' = "Puno", '22' = "San Martín",
+                                                    '23' = "Tacna", '24' = "Tumbes", '25' = "Ucayali"))
+table(jovenes$departamento, useNA = "alw")
+```
+
+### Variable área de residencia
+
+Se verifica la distribución de la variable "estrato" incluyendo los valores perdidos (NA).
+
+```{r}
+table(jovenes$estrato, useNA = "alw")
+```
+
+Se procedio a recodificar la variable "area" con los valores (Urbano, Rural, NA) y verificamos la distribución de la variable.
+
+```{r}
+jovenes <- jovenes %>% mutate( area = ifelse(estrato>=1 & estrato<=5, "Urbano", ifelse(estrato>=6 & estrato<=8, "Rural", NA )))
+table(jovenes$area, useNA = "alw")
+```
+
+### Variable sexo
+
+Se verifica la distribución de la variable "p207" incluyendo los valores perdidos (NA).
+
+```{r}
+table(jovenes$p207, useNA = "alw")
+```
+
+Se procedio a recodificar la variable "sexo" con los valores (Hombre, Mujer, NA) y verificamos la distribución de la variable.
+
+```{r}
+jovenes <- jovenes %>% mutate(sexo = ifelse(p207==1, "Hombre", ifelse(p207==2, "Mujer", NA)))
+table(jovenes$sexo, useNA = "alw")
+```
+
+### Variable region natural
+
+Se verifica la distribución de la variable "dominio" incluyendo los valores perdidos (NA).
+
+```{r}
+table(jovenes$dominio, useNA = "alw")
+```
+
+Se procedio a recodificar la variable "region" con los valores (Costa, Sierra, Selva, NA) y verificamos la distribución de la variable.
+
+```{r}
+jovenes <- jovenes %>% mutate(region = ifelse( (dominio>=1 & dominio<=3) | dominio==8, "Costa", 
+                                               ifelse(dominio>=4 & dominio<=6, "Sierra",
+                                               ifelse(dominio==7, "Selva", NA))))
+table(jovenes$region, useNA = "alw")
+```
+
+### Variable grupo de edad
+
+Se verifica la distribución de la variable "edad" incluyendo los valores perdidos (NA).
+
+```{r}
+table(jovenes$edad, useNA = "alw")
+```
+
+Se procedio a recodificar la variable "edad" con los valores (De 15 a 17 años, De 18 a 24 años, De 25 a 29 años, NA) y verificamos la distribución de la variable.
+
+```{r}
+jovenes <- jovenes %>% mutate(gedad = case_when( edad %in% c(15:17) ~ "De 15 a 17 años", 
+                                                 edad %in% c(18:24) ~ "De 18 a 24 años",
+                                                 edad %in% c(25:29) ~ "De 25 a 29 años"))
+table(jovenes$gedad, useNA = "alw")
+```
+
+### Variable nivel educativo
+
+Se verifica la distribución de la variable "p301a.x" incluyendo los valores perdidos (NA).
+
+```{r}
+table(jovenes$p301a.x, useNA = "alw")
+```
+
+Se procedio a recodificar la variable "p301a.x" con los valores (Primaria, Secundaria, SNU, SU, NA) y verificamos la distribución de la variable.
+
+```{r}
+jovenes <- jovenes %>% mutate(nivel_educ = ifelse( (p301a.x>=1 & p301a.x<=4) | p301a.x==12, "Primaria",
+                                           ifelse( (p301a.x>=5 & p301a.x<=6), "Secundaria",
+                                           ifelse( (p301a.x>=7 & p301a.x<=8), "SNU",
+                                           ifelse( (p301a.x>=9 & p301a.x<=11), "SU", NA)))))
+table(jovenes$nivel_educ, useNA = "alw")
+```
+
+### Variable lengua materna
+
+Se verifica la distribución de la variable "p300a" incluyendo los valores perdidos (NA).
+
+```{r}
+table(jovenes$p300a, useNA = "alw")
+```
+
+Se procedio a recodificar la variable "lengua" con los valores (Castellano, Lengua Nativa, NA) y verificamos la distribución de la variable.
+
+```{r}
+jovenes <- jovenes %>% mutate(lengua = ifelse(p300a==4, "Castellano", "Lengua nativa"))
+table(jovenes$lengua, useNA = "alw")
+```
+
+### Variable nini
+
+Se verifica la distribución de la variable "ocu500" incluyendo los valores perdidos (NA).
+
+```{r}
+table(jovenes$ocu500, useNA = "alw")
+```
+
+Se verifica la distribución de la variable "p307" incluyendo los valores perdidos (NA).
+
+```{r}
+table(jovenes$p307, useNA = "alw")
+```
+
+Se procedio a recodificar la variable "p307", aplicando la condicional, si tiene un a valor NA reemplazalo con 2 y verificamos la distribución de la variable.
+
+```{r}
+jovenes <- jovenes %>% mutate(p307 = ifelse(is.na(p307), 2, p307))
+table(jovenes$p307, useNA = "alw")
+```
+
+Se procedio a recodificar la variable "mini", que identifica jóvenes que no estudian ni trabajan y verificamos la distribución de la variable.
+
+```{r}
+jovenes <- jovenes %>% mutate(nini = ifelse( (ocu500==3 | ocu500==4) & (p307==2), 1, 0))
+table(jovenes$nini, useNA = "alw")
+```
+
+## 1.4. Seleccionar variables
+
+Seleccionamos especificamente las columnas trabajadas del dataframe "jovenes".
+
+```{r}
+jovenes <- jovenes %>% select(departamento, area, sexo, region, gedad, nivel_educ, lengua, nini, conglome, estrato, fac500a)
+```
+
+## 1.5. Guardar base de datos limpia
+
+Se guarda el dataframe "jovenes" filtrado.
+
+```{r}
+save(jovenes, file=paste("./joevenes15a29.RData",sep="/"))
+```
+
+# 2. Población NINI
+
+## 2.1. Especificar el tipo de muestreo
+
+Cargar base de datos limpia
+
+```{r}
+load(paste("./joevenes15a29.RData",sep="/"))
+```
+
+Especificar el tipo de muestreo
+
+```{r}
+encuesta = svydesign(data=jovenes, id=~conglome, strata=~estrato, weights=~fac500a)
+```
+
+## 2.2. Población NINI
+
+En el año 2023, se estima que el x% de la población de 15 a 29 años de edad, ni estudia ni trabaja (NINI).
+
+```{r}
+nini <- svymean(~nini, encuesta, deff=F, na.rm=T)
+nini
+```
+
+# 3. Población NINI: características
+
+## 3.1. NINI según departamento
+
+Interpretación
+
+```{r}
+nini_dpto <- svyby(~nini, ~departamento, encuesta, svymean, deff=F, na.rm=T)
+nini_dpto <- nini_dpto %>% mutate(across(where(is.numeric), ~ round(. * 100, 2)),
+                                  cv = round((se/nini)*100,2))
+kable(nini_dpto, digits = 2, row.names = FALSE, 
+      col.names = c("Departamento", "Proporción Nini", "Error estándar", "Coeficiente de variación (%)"))
+
+```
+
+```{r}
+#
+```
+
+## 3.2. NINI según área de residencia
+
+Interpretación
+
+```{r}
+nini_area <- svyby(~nini, ~area, encuesta, svymean, deff=F, na.rm=T)
+nini_area <- nini_area %>% mutate(across(where(is.numeric), ~ round(. * 100, 2)),
+                                  cv = round((se/nini)*100,2))
+kable(nini_area, digits = 2, row.names = FALSE, col.names = c("Área de residencia", "Proporción Nini", "Error estándar", "Coeficiente de variación (%)")) 
+```
+
+```{r}
+#
+```
+
+## 3.3. NINI según sexo
+
+Interpretación
+
+```{r}
+nini_sexo <- svyby(~nini, ~sexo, encuesta, svymean, deff=F, na.rm=T)
+nini_sexo <- nini_sexo %>% mutate(across(where(is.numeric), ~ round(. * 100, 2)),
+                                  cv = round((se/nini)*100,2))
+kable(nini_sexo, digits = 2, row.names = FALSE, col.names = c("Sexo", "Proporción Nini", "Error estándar", "Coeficiente de variación (%)")) 
+```
+
+```{r}
+###
+```
+
+## 3.4. NINI según región natural
+
+Interpretación
+
+```{r}
+nini_region <- svyby(~nini, ~region, encuesta, svymean, deff=F, na.rm=T)
+nini_region <- nini_region %>% mutate(across(where(is.numeric), ~ round(. * 100, 2)),
+                                  cv = round((se/nini)*100,2))
+kable(nini_region, digits = 2, row.names = FALSE, col.names = c("Region natural", "Proporción Nini", "Error estándar", "Coeficiente de variación (%)"))
+```
+
+```{r}
+###
+```
+
+## 3.5. NINI según grupo de edad
+
+Interpretación
+
+```{r}
+nini_edad <- svyby(~nini, ~gedad, encuesta, svymean, deff=F, na.rm=T)
+nini_edad <- nini_edad %>% mutate(across(where(is.numeric), ~ round(. * 100, 2)),
+                                  cv = round((se/nini)*100,2))
+kable(nini_edad, digits = 2, col.names = c("Grupo de edad", "Proporción Nini", "Error estándar", "Coeficiente de variación (%)")) 
+```
+
+## 3.6. NINI según nivel educativo
+
+Interpretación
+
+```{r}
+nini_nivel_educ <- svyby(~nini, ~nivel_educ, encuesta, svymean, deff=F, na.rm=T)
+nini_nivel_educ <- nini_nivel_educ %>% mutate(across(where(is.numeric), ~ round(. * 100, 2)))
+kable(nini_nivel_educ, digits = 2, col.names = c("Nivel educativo", "Proporción Nini", "Error estándar", "Coeficiente de variación (%)")) 
+```
+
+```{r}
+#
+```
+
+## 3.7. NINI según lengua materna
+
+Interpretación
+
+```{r}
+nini_lengua <- svyby(~nini, ~lengua, encuesta, svymean, deff=F, na.rm=T)
+nini_lengua <- nini_lengua %>% mutate(across(where(is.numeric), ~ round(. * 100, 2)))
+kable(nini_lengua, digits = 2, col.names = c("Lengua materna", "Proporción Nini", "Error estándar", "Coeficiente de variación (%)")) 
+```
+
+# 4. Determinantes NINI
+
+XXXXXXXXXXXXXX
